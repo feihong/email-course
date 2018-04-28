@@ -1,5 +1,7 @@
 import base64
 import email
+import mimetypes
+from pathlib import Path
 from apiclient.discovery import build
 from httplib2 import Http
 from oauth2client import file, client, tools
@@ -87,6 +89,16 @@ def send(simple_email):
     em['Subject'] = sm.subject
     em['To'] = sm.recipient
     em['From'] = sm.sender
+    for att in sm.attachments:
+        path = Path(att)
+        content_type, _encoding = mimetypes.guess_type(path.name)
+        maintype, subtype = content_type.split('/', 1)
+        em.add_attachment(
+            path.read_bytes(),
+            maintype=maintype,
+            subtype=subtype,
+            filename=path.name)
+
     body = base64.urlsafe_b64encode(em.as_bytes()).decode('ascii')
     message = (service.users().messages().send(userId='me', body={'raw': body})
                .execute())
