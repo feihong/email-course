@@ -49,10 +49,31 @@ def _get_message_ids():
         yield msg['id']
 
 
-def _get_messages():
+def _get_message_requests():
     msg_resource = service.users().messages()
     for msg_id in _get_message_ids():
-        yield msg_resource.get(userId='me', id=msg_id, format='raw').execute()
+        yield msg_resource.get(userId='me', id=msg_id, format='raw')
+
+
+def _get_messages():
+    """
+    Retrieve all unread messages using a batch request.
+
+    Todo: Allow this function to retrieve more than 100 messages (batch requests
+    limit is 100)
+
+    """
+    responses = []
+    def callback(_id, response, _exception):
+        # todo: do something with exceptions
+        responses.append(response)
+
+    batch_req = service.new_batch_http_request(callback)
+    for req in _get_message_requests():
+        batch_req.add(req)
+
+    batch_req.execute()     # execute() returns None
+    return responses
 
 
 def _convert(msg):

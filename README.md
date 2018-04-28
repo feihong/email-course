@@ -11,3 +11,4 @@ A course about how to use email, implemented as an email bot.
 
 - [Python Quickstart](https://developers.google.com/gmail/api/quickstart/python)
 - [Gmail API Documentation](https://developers.google.com/resources/api-libraries/documentation/gmail/v1/python/latest/)
+- [Batching Requests](https://developers.google.com/gmail/api/guides/batch)
