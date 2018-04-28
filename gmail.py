@@ -16,6 +16,7 @@ class SimpleEmail:
     thread_id = attr.ib(default='')
     label_ids = attr.ib(default=attr.Factory(list))
     sender = attr.ib(default='')
+    recipient = attr.ib(default='')
     subject = attr.ib(default='')
     body = attr.ib(default='')
     # List of attachment names
@@ -49,23 +50,45 @@ def _get_messages():
         yield msg_resource.get(userId='me', id=msg_id, format='raw').execute()
 
 
-def _simplify(msg):
+def _convert(msg):
     """
-    Convert gmail message dict to SimpleEmail object.
+    Convert gmail message dict to EmailMessage object.
 
     """
     msg_bytes = base64.urlsafe_b64decode(msg['raw'])
     # Have to specify policy, otherwise we get a Message object instead of an
     # EmailMessage object.
-    email_msg = email.message_from_bytes(msg_bytes, policy=email.policy.default)
+    return email.message_from_bytes(msg_bytes, policy=email.policy.default)
+
+
+def _simplify(msg):
+    """
+    Convert gmail message dict to SimpleEmail object.
+
+    """
     result = SimpleEmail(
         id=msg['id'],
         thread_id=msg['threadId'],
         label_ids=msg['labelIds'])
 
+    email_msg = _convert(msg)
     result.subject = email_msg['Subject']
     result.sender = email_msg['From']
     result.body = email_msg.get_body('plain').get_content()
     result.attachments = [part.get_filename() for part in
                             email_msg.iter_attachments()]
     return result
+
+
+def send(simple_email):
+    sm = simple_email
+    em = email.message.EmailMessage()
+    em.set_content(sm.body)
+    em['Subject'] = sm.subject
+    em['To'] = sm.recipient
+    em['From'] = sm.sender
+    body = base64.urlsafe_b64encode(em.as_bytes()).decode('ascii')
+    message = (service.users().messages().send(userId='me', body={'raw': body})
+               .execute())
+    print(message)
+    return message
