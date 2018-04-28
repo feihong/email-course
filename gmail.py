@@ -1,5 +1,6 @@
 import base64
 import email
+from email.message import EmailMessage
 import mimetypes
 from pathlib import Path
 from apiclient.discovery import build
@@ -16,6 +17,7 @@ class SimpleEmail:
     """
     id = attr.ib(default='')
     thread_id = attr.ib(default='')
+    message_id = attr.ib(default='')
     label_ids = attr.ib(default=attr.Factory(list))
     sender = attr.ib(default='')
     recipient = attr.ib(default='')
@@ -40,7 +42,8 @@ def get_unread_messages():
 
 
 def _get_message_ids():
-    results = service.users().messages().list(userId='me', labelIds=['UNREAD']).execute()
+    results = (service.users().messages()
+        .list(userId='me', labelIds=['UNREAD']).execute())
     messages = results.get('messages', [])
     for msg in messages:
         yield msg['id']
@@ -71,9 +74,11 @@ def _simplify(msg):
     result = SimpleEmail(
         id=msg['id'],
         thread_id=msg['threadId'],
-        label_ids=msg['labelIds'])
+        label_ids=msg['labelIds'],
+    )
 
     email_msg = _convert(msg)
+    result.message_id = email_msg['Message-Id']
     result.subject = email_msg['Subject']
     result.sender = email_msg['From']
     result.body = email_msg.get_body('plain').get_content()
@@ -81,10 +86,8 @@ def _simplify(msg):
                             email_msg.iter_attachments()]
     return result
 
-
-def send(simple_email):
-    sm = simple_email
-    em = email.message.EmailMessage()
+def _get_email_message(sm: SimpleEmail):
+    em = EmailMessage()
     em.set_content(sm.body)
     em['Subject'] = sm.subject
     em['To'] = sm.recipient
@@ -99,8 +102,32 @@ def send(simple_email):
             subtype=subtype,
             filename=path.name)
 
-    body = base64.urlsafe_b64encode(em.as_bytes()).decode('ascii')
-    message = (service.users().messages().send(userId='me', body={'raw': body})
+    return em
+
+
+def _send_email_message(em: EmailMessage):
+    raw = base64.urlsafe_b64encode(em.as_bytes()).decode('ascii')
+    message = (service.users().messages().send(userId='me', body={'raw': raw})
                .execute())
-    print(message)
+    return message
+
+
+def send(sm: SimpleEmail):
+    em = _get_email_message(sm)
+    return _send_email_message(em)
+
+def reply(orig: SimpleEmail, response: SimpleEmail):
+    response.subject = 'Re: ' + orig.subject
+    response.sender, response.recipient = orig.recipient, orig.sender
+    em = _get_email_message(response)
+    em['References'] = orig.message_id
+    em['In-Reply-To'] = orig.message_id
+
+    raw = base64.urlsafe_b64encode(em.as_bytes()).decode('ascii')
+    body = {
+        'raw': raw,
+        'threadId': orig.thread_id,
+    }
+    message = (service.users().messages().send(userId='me', body=body)
+               .execute())
     return message
